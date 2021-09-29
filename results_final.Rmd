@@ -1,0 +1,150 @@
+---
+title: "Results"
+author: "IPM"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+### Feature selection
+We used two feature selection method, *mRMR* and *LASSO* to select the feature. At first, *mRMR* was performed to eliminate the redundant and irrelevant features, 30 features were retained. Then *LASSO* was conducted to choose the optimized subset of features to construct the final model.
+
+#### LASSO
+
+1. The LASSO includes choosing the regular parameter $\lambda$, determining the number of the feature.
+
+```{r, echo = FALSE, fig.height=9}
+oldpar <- par(mfrow = c(2, 1))
+plot(cvfit)
+# figure2
+plot(fit, s = s, xvar = 'lambda')
+abline(v = log(cvfit$lambda.min), lty = 2)
+par(oldpar)
+```
+
+2. After the number of feature determined, the most predictive subset of feature was chosen and the corresponding coefficients were evaluated.
+
+```{r, echo = FALSE}
+p_coef + theme(axis.text.y = element_text(size = 12))
+
+```
+
+### Radiomics signature construction
+#### Radscore
+
+Radscore was calculated by summing the selected features weighted by their coefficients. The final formula of radscore is:
+```{r, echo = FALSE}
+print(radscore)
+```
+
+And we compared the radscores from class 0 and class 1 on training group and test group respectively.
+```{r, warning=FALSE}
+ggarrange(p_train, p_test, ncol = 2)
+```
+
+#### Radiomics valiation
+We used ROC analysis to evaluate the performance of the model：  
+
+```{r, fig.width=10}
+oldpar <- par(mfrow = c(1, 2))
+plot(roc_res_train, print.auc = T, 
+     print.auc.pattern = 'AUC: %.2f(%.2f-%.2f)', legacy.axes = T)
+
+# figure4
+plot(roc_res_test, print.auc = T, legacy.axes = T,
+     print.auc.pattern = 'AUC: %.2f(%.2f-%.2f)')
+
+par(oldpar)
+```
+
+
+### Nomogram build
+
+#### Clinicopathological factors and radscore selection
+
+```{r, echo = FALSE}
+glmSeries(Label~1, data = dt_cli_train_1, vars = colnames(dt_cli_train_1)[-1], 
+          family = 'binomial')
+```
+
+```{r, echo = F}
+{
+  publish(log_fit_final)
+}
+```
+
+#### nomogram
+```{r, echo = F}
+plot(nom_com)
+```
+
+Based on Youden Index, other parameters were calculated as following:
+
+```{r}
+knitr::kable(rec_final, caption = 'Model Comparison')
+```
+
+#### nomogram validation
+
+```{r, echo = FALSE, fig.width=10}
+oldpar <- par(mfrow = c(1, 2))
+plot(res_roc_com_train, print.auc = T, print.auc.pattern = 'AUC: %.2f (%.2f - %.2f)',
+     legacy.axes = T, col = 'red')
+plot(roc_res_train, print.auc = T, print.auc.pattern = 'AUC: %.2f (%.2f - %.2f)',
+     add = T, col = 'blue', print.auc.y = 0.45)
+plot(roc_cli_train, print.auc =T, print.auc.pattern = 'AUC: %.2f (%.2f - %.2f)', 
+     add = T, col = 'green', print.auc.y = 0.4)
+legend(x = 0.4, y = 0.3, legend = c('Combined', 'Radiomics', 'Clinics'), 
+       col = c('red', 'blue', 'green'), lty = 1)
+
+
+plot(res_roc_com_test, print.auc = T, print.auc.pattern = 'AUC: %.2f (%.2f - %.2f)',
+     legacy.axes = T, col = 'red', print.auc.y = 0.5)
+plot(roc_res_test, print.auc = T, print.auc.pattern = 'AUC: %.2f (%.2f - %.2f)',
+     add = T, col = 'blue', print.auc.y = 0.45)
+plot(roc_cli_test, print.auc =T, print.auc.pattern = 'AUC: %.2f (%.2f - %.2f)', 
+     add = T, col = 'green', print.auc.y = 0.4)
+
+legend(x = 0.4, y = 0.3, legend = c('Combined', 'Radiomics', 'Clinics'), 
+       col = c('red', 'blue', 'green'), lty = 1)
+par(oldpar)
+```
+
+ROC test
+
+```{r, echo = T}
+roc.test(res_roc_com_train, roc_cli_train)
+```
+
+```{r, echo = T}
+roc.test(res_roc_com_test, roc_cli_test)
+```
+
+
+```{r, echo = F, fig.width=10}
+oldpar <- par(mfrow = c(1, 2))
+cal_train <- calPlot2(mod_train, data = dt_combined_train_final, 
+                      legend = F, col = 	'#FF6EB4', lty = 2)
+cal_test <- calPlot2(mod_train, data = dt_combined_test_final,
+                     legend = F, col = 	'#FF6EB4', lty = 2)
+par(oldpar)
+```
+
+Hosmer-Lemeshow Test results:
+```{r, echo = F}
+HosmerLemeshowTest(cal_train$Frame$lrm, cal_train$Frame$jack)
+HosmerLemeshowTest(cal_test$Frame$lrm, cal_test$Frame$jack)
+```
+
+Finally, we used decision curve to evaluate the clinical usefullness of the model:
+
+```{r}
+plot_decision_curve(list(dca1, dca2), confidence.intervals = F, 
+                    col = c('red', 'green', 'blue', 'black'), 
+                    curve.names = c('With Radscore', 'Without Radscore'),
+                    legend.position = 'topright', cost.benefits = FALSE)
+```
+
